@@ -79,6 +79,13 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
 .desc{margin:0;color:var(--dim);line-height:1.6;max-width:36em}
 .ladder{display:flex;flex-direction:column;gap:8px}
 .foe-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 14px;border:2px solid var(--line);background:rgba(21,26,39,.85);border-radius:6px;text-align:left}
+.pick-h{margin:0 0 5px;font-family:var(--f-display);font-size:13px;color:var(--gold)}
+.pick-h small{font-family:var(--f-body);font-size:11px;color:var(--dim);margin-left:6px}
+.pick-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.pick-row button{min-width:0;padding:7px 2px;border:2px solid var(--line);background:rgba(21,26,39,.85);border-radius:6px;text-align:center}
+.pick-row b{display:block;font-family:var(--f-display);font-weight:400;font-size:15px;line-height:1.2;white-space:nowrap}
+.pick-row small{display:block;color:var(--dim);font-size:clamp(9px,2.6vw,11px);line-height:1.4;white-space:nowrap}
+.pick-row button[aria-pressed="true"]{border-color:var(--blue);background:rgba(63,134,240,.16)}
 .foe-row .ord{font-family:var(--f-display);font-size:13px;color:var(--dim)}
 .foe-row .who{min-width:0}
 .foe-row .who b{display:block;font-family:var(--f-display);font-weight:400;font-size:18px;line-height:1.2}
@@ -158,6 +165,7 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
       <div class="sheet">
         <p class="eyebrow">3D 종합격투 · 옥타곤</p>
         <h1>한방 <em>격투</em></h1>
+        <div class="pick"><p class="pick-h">내 선수 <small>선수마다 필살기가 다르다</small></p><div class="pick-row" id="pick"></div></div>
         <div class="ladder" id="ladder"></div>
         <ul class="how">
           <li><b>잽·스트레이트</b>로 거리를 재고, <b>보디훅·킥</b>으로 크게 때린다</li>
@@ -205,7 +213,8 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
           <li><b>콤보</b>: 잽 → 스트레이트 → 보디훅처럼 이어서 누르면 끊기지 않고 나간다</li>
           <li><b>가드</b>: 피해가 크게 줄지만 스태미나가 깎이고, 바닥나면 무너진다. 주먹을 낸 뒤에도 가드를 누르면 바로 올라간다</li>
           <li><b>퍼펙트 가드</b>: 맞기 직전에 가드를 딱 올리면 피해 없이 막고 상대가 휘청인다. 필살기도 끊는다</li>
-          <li><b>필살기</b>: 때리고 맞고 막으면 보라색 게이지가 찬다. 다 차면 가까이서는 <b>회오리 연타</b>(4연타), 멀리서는 <b>슈퍼맨 펀치</b>(날아서 한 방)가 나간다. 쓰는 동안은 맞아도 안 끊긴다</li>
+          <li><b>필살기</b>: 때리고 맞고 막으면 보라색 게이지가 찬다. 다 차면 고른 선수의 필살기가 나간다. 쓰는 동안은 맞아도 안 끊긴다</li>
+          <li><b>선수별 필살기</b>: 이한방 <b>슈퍼맨 펀치</b>(멀리서 날아가 한 방) · 오만득 <b>슬라이딩 태클</b>(멀리서 미끄러져 다리 걸기) · 강번개 <b>번개 연타</b>(가까이서 6연타) · 한태산 <b>회오리 연타</b>(가까이서 돌면서 4연타)</li>
           <li><b>스텝</b>: 조이스틱 방향으로 빠지며 잠깐 무적. 방향이 없으면 뒤로 빠진다</li>
           <li><b>카운터</b>: 상대가 주먹을 내는 순간 먼저 맞히면 더 아프고, 보디훅·킥이면 다운</li>
         </ul>
@@ -232,7 +241,7 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
   <div id="pad" class="gut" hidden>
     <div id="joy" aria-label="이동 조이스틱"><div id="knob"></div></div>
     <div class="grp">
-      <button class="key spc" data-a="sp" type="button">필살기 · <span id="spLabel">회오리 연타</span><kbd>O</kbd></button>
+      <button class="key spc" data-a="sp" type="button">필살기 · <span id="spLabel">슈퍼맨 펀치</span><kbd>O</kbd></button>
       <button class="key atk" data-a="jab" type="button">잽<kbd>J</kbd></button>
       <button class="key atk sm" data-a="cross" type="button">스트레이트<kbd>K</kbd></button>
       <button class="key big" data-a="hook" type="button">보디훅<kbd>L</kbd></button>
@@ -358,28 +367,37 @@ function fxUpdate(dt){ for(const p of parts){ if(p.life<=0) continue; p.life-=dt
 
 // ---------- 선수 데이터 ----------
 const LV=[
- {name:'오만득',nick:'샌드백',line:'느리고 정직하다. 연습 상대로 딱.',hp:95,sp:0,block:.15,dodge:.05,gap:[.9,1.7],dmgMul:.85,
+ {name:'오만득',nick:'샌드백',line:'느리고 정직하다. 연습 상대로 딱.',hp:95,sp:.5,spId:'sp4',block:.15,dodge:.05,gap:[.9,1.7],dmgMul:.85,
   combos:[['jab'],['jab','cross'],['hook'],['kick'],['jab']],look:{tint:'#f3ddd0',shorts:'#2e7d5b',band:'#f3f1ea',glove:'#c62f2f',scale:1}},
- {name:'강번개',nick:'속사포',line:'잽이 연달아 나오고 가드도 올린다.',hp:120,sp:.8,block:.4,dodge:.15,gap:[.45,1.1],dmgMul:1,
+ {name:'강번개',nick:'속사포',line:'잽이 연달아 나오고 가드도 올린다.',hp:120,sp:.8,spId:'sp3',block:.4,dodge:.15,gap:[.45,1.1],dmgMul:1,
   combos:[['jab','jab','cross'],['jab','cross'],['jab','kick'],['cross','hook'],['kick'],['jab','jab']],look:{tint:'#d2ad92',shorts:'#6a3fd0',band:'#f5b82e',glove:'#c62f2f',scale:.97}},
- {name:'한태산',nick:'챔피언',line:'잘 막고 잘 빠지고, 콤보가 길다.',hp:145,sp:1.5,block:.6,dodge:.25,gap:[.25,.8],dmgMul:1.2,
+ {name:'한태산',nick:'챔피언',line:'잘 막고 잘 빠지고, 콤보가 길다.',hp:145,sp:1.5,spId:'sp1',block:.6,dodge:.25,gap:[.25,.8],dmgMul:1.2,
   combos:[['jab','cross','hook'],['jab','jab','kick'],['cross','kick'],['jab','cross','jab','hook'],['kick','cross'],['hook']],look:{tint:'#b48a6e',shorts:'#15171d',band:'#f5b82e',glove:'#d4a017',scale:1.04}}
 ];
-const LOOK_ME={tint:'#ffffff',shorts:'#1f4fbf',band:'#f3f1ea',glove:'#2f6fe0',scale:1};
-const LOOK_FRIEND={tint:'#e6c4ab',shorts:'#b3262a',band:'#14161c',glove:'#c62f2f',scale:1};
+// 고를 수 있는 선수: 주인공 + 사다리의 세 명. 능력치는 같고 생김새와 필살기만 다르다
+const HERO={name:'이한방',nick:'주인공',spId:'sp2',look:{tint:'#ffffff',shorts:'#1f4fbf',band:'#f3f1ea',glove:'#2f6fe0',scale:1}};
+const CH=[HERO].concat(LV);
+const lookCache={};
+function lookOf(ci,side){ const c=CH[ci]||HERO,k=ci+side; return lookCache[k]||(lookCache[k]=Object.assign({},c.look,{glove:side==='me'?'#2f6fe0':'#c62f2f'})); }   // 나는 늘 파란 장갑, 친구는 빨간 장갑
 const ATK={
  jab:{id:'jab',clip:'Punch_Jab',spd:1.5,impact:.13,dur:.5,cancel:.27,dmg:4,cost:4,reach:1.15,stun:.2,lunge:.2,h:0,hi:1},
  cross:{id:'cross',clip:'Punch_Cross',spd:1.4,impact:.19,dur:.62,cancel:.4,dmg:8,cost:8,reach:1.15,stun:.3,lunge:.25,h:1,hi:1},
  hook:{id:'hook',clip:'Melee_Hook',spd:1,impact:.27,dur:.86,cancel:.72,dmg:13,cost:14,reach:1.5,stun:.45,lunge:.1,h:2,hi:0,heavy:true,rec:'Melee_Hook_Rec',recAt:.45},
  kick:{id:'kick',clip:'Kick',spd:1,impact:.27,dur:.7,cancel:.58,dmg:11,cost:12,reach:1.6,stun:.4,lunge:0,h:2,hi:0,heavy:true},
- // 필살기: 게이지가 다 차면 쓴다. 가까우면 회오리 연타, 멀면 슈퍼맨 펀치
- sp1:{id:'sp1',name:'회오리 연타',clip:'Sword_Heavy_Combo',spd:1.7,dur:1.95,cancel:9,cost:0,reach:1.8,lunge:0,sp:1,track:2.6,
+ // 필살기: 게이지가 다 차면 쓴다. 선수마다 하나씩 다르다
+ sp1:{id:'sp1',name:'회오리 연타',clip:'Sword_Heavy_Combo',spd:1.7,dur:1.95,cancel:9,cost:0,reach:1.8,lunge:0,sp:1,track:2.6,rng:1.7,
   hits:[{t:.29,dmg:7,stun:.5,h:1,hi:0,heavy:true},{t:.65,dmg:7,stun:.5,h:1,hi:1,heavy:true},{t:1.06,dmg:8,stun:.6,h:2,hi:1,heavy:true},{t:1.54,dmg:14,stun:.5,h:2,hi:1,heavy:true,kd:1}]},
- sp2:{id:'sp2',name:'슈퍼맨 펀치',clip:'OverhandThrow',spd:1.35,dur:.9,cancel:9,cost:0,reach:1.7,lunge:0,sp:1,dash:10,leap:.5,
-  hits:[{t:.3,dmg:26,stun:.6,h:2,hi:1,heavy:true,kd:1}]}
+ sp2:{id:'sp2',name:'슈퍼맨 펀치',clip:'OverhandThrow',spd:1.35,dur:.9,cancel:9,cost:0,reach:1.7,lunge:0,sp:1,dash:10,stop:1.3,leap:.5,rng:3.4,
+  hits:[{t:.3,dmg:28,stun:.6,h:2,hi:1,heavy:true,kd:1}]},
+ sp3:{id:'sp3',name:'번개 연타',clip:'Punch_Jab',spd:2.6,dur:1.5,cancel:9,cost:0,reach:1.5,lunge:0,sp:1,track:3,stop:.88,rng:1.6,
+  parts:[{t:.19,clip:'Punch_Cross',spd:2.6},{t:.4,clip:'Punch_Jab',spd:2.6},{t:.59,clip:'Punch_Cross',spd:2.6},{t:.8,clip:'Punch_Jab',spd:2.6},{t:.99,clip:'Punch_Cross',spd:1.5}],
+  hits:[{t:.08,dmg:4,stun:.32,h:0,hi:1},{t:.29,dmg:4,stun:.32,h:0,hi:1},{t:.48,dmg:4,stun:.32,h:0,hi:1},{t:.69,dmg:4,stun:.32,h:0,hi:1},{t:.88,dmg:4,stun:.4,h:0,hi:1},{t:1.17,dmg:11,stun:.5,h:2,hi:1,heavy:true,kd:1}]},
+ sp4:{id:'sp4',name:'슬라이딩 태클',clip:'Slide_Start',spd:1.4,dur:1.0,cancel:9,cost:0,reach:1.9,lunge:0,sp:1,dash:9,stop:1.25,rng:3.2,
+  parts:[{t:.56,clip:'Slide_Exit',spd:1.2}],
+  hits:[{t:.25,dmg:22,stun:.6,h:2,hi:0,heavy:true,kd:1}]}
 };
 for(const k in ATK){ const A=ATK[k],hs=A.hits||[{t:A.impact}]; A.hits=null; A.hits=hs.map((h,i)=>Object.assign({},A,h,{x:i})); A.impact=hs[0].t; A.last=hs[hs.length-1].t; }
-const SP_FAR=1.9;
+
 const MINSEP=.85;
 
 // ---------- 불러오기 ----------
@@ -450,14 +468,14 @@ async function loadAll(){
   eyeTex=new T.Texture(ey); eyeTex.flipY=false; eyeTex.encoding=T.sRGBEncoding; eyeTex.needsUpdate=true;
   const [g0,g1,ga,gb]=await Promise.all([parse(fb),parse(fb),parse(a1),parse(a2)]);
   for(const c of ga.animations.concat(gb.animations)){ c.tracks=c.tracks.filter(t=>t.name.indexOf('root.')!==0&&!/\.scale$/.test(t.name)); clips[c.name]=c; }
-  F.push(makeFighter(g0,LOOK_ME),makeFighter(g1,LV[0].look));
+  F.push(makeFighter(g0,lookOf(G.char,'me')),makeFighter(g1,LV[0].look));
   buildProcClips(F[0]); F.forEach(bindClips);
   F[0].opp=F[1]; F[1].opp=F[0]; F[0].ctrl='player'; F[1].ctrl='ai';
 }
 
 // ---------- 경기 상태 ----------
-const G={phase:'menu',pt:0,mode:'sp',level:0,round:1,rounds:3,clock:60,freeze:0,slowT:0,said:false,unlocked:1,sel:0,win:false,draw:false,how:'',shown:false,bannerT:0,view:'back',camSide:1};
-try{ const u=parseInt(localStorage.getItem('hanbang.mma.unlocked'),10); if(u>=1&&u<=LV.length) G.unlocked=u; if(localStorage.getItem('hanbang.view2')==='tv') G.view='tv'; }catch(e){}
+const G={char:0,phase:'menu',pt:0,mode:'sp',level:0,round:1,rounds:3,clock:60,freeze:0,slowT:0,said:false,unlocked:1,sel:0,win:false,draw:false,how:'',shown:false,bannerT:0,view:'back',camSide:1};
+try{ const u=parseInt(localStorage.getItem('hanbang.mma.unlocked'),10); if(u>=1&&u<=LV.length) G.unlocked=u; if(localStorage.getItem('hanbang.view2')==='tv') G.view='tv'; const c=parseInt(localStorage.getItem('hanbang.char'),10); if(c>=0&&c<4) G.char=c; }catch(e){}
 function save(){ try{ localStorage.setItem('hanbang.mma.unlocked',String(G.unlocked)); }catch(e){} }
 function resetFighter(f,x,maxHp){ f.x=x; f.z=0; f.tx=x; f.tz=0; f.rot=x<0?Math.PI/2:-Math.PI/2; f.trot=f.rot; f.st='idle'; f.t=0; f.maxHp=maxHp; f.hp=maxHp; f.sta=100; f.guard=false; f.atk=null; f.hitDone=true; f.recDone=false; f.vx=0; f.vz=0; f.wasDown=false; f.seq=0; f.hitSeq=0; f.hitKind=0; f.buf=null; f.bufT=0; f.dealt=0; f.downs=0; f.tm=1; f.tired=false; f.reacted=false; f.moving=0; f.y=0; f.lean=0; f.gT=1; f.gOff=1; f.hitI=0; f.I.act=null; f.I.guard=false; f.I.mx=f.I.mz=0; f.ai.mode='approach'; f.ai.t=1; f.ai.q=[]; f.ai.guardT=0; play(f,'Stance',{fade:.2}); }
 function setPhase(p){ G.phase=p; G.pt=0; G.said=false; }
@@ -478,10 +496,11 @@ function startAct(f,act){
     if(m<.3){ const d=dist(f,o)||1; dx=(f.x-o.x)/d; dz=(f.z-o.z)/d; } else { dx/=m; dz/=m; }
     f.st='step'; f.t=0; f.vx=dx*5.4; f.vz=dz*5.4; f.atk=null; f.hitDone=true; f.guard=false; play(f,'Shield_Dash',{once:true,speed:2.3,start:.12,force:true,fade:.06}); if(f.ctrl==='player') sfx.whoosh(); return true; }
   let A=ATK[act];
-  if(act==='sp'){ if(f.sp<100) return false; A=dist(f,f.opp)>SP_FAR?ATK.sp2:ATK.sp1; f.sp=0; }
+  if(act==='sp'){ if(f.sp<100) return false; A=ATK[f.spId]||ATK.sp2; f.sp=0; }
   if(!A) return false;
-  f.tired=f.sta<A.cost; f.sta=Math.max(0,f.sta-A.cost); f.tm=f.tired?1.3:1; f.atk=A; f.st='atk'; f.t=0; f.hitI=0; f.hitDone=false; f.recDone=false; f.seq++; f.guard=false;
+  f.tired=f.sta<A.cost; f.sta=Math.max(0,f.sta-A.cost); f.tm=f.tired?1.3:1; f.atk=A; f.st='atk'; f.t=0; f.hitI=0; f.partI=0; f.hitDone=false; f.recDone=false; f.seq++; f.guard=false;
   play(f,A.clip,{once:true,speed:A.spd/f.tm,force:true,fade:.06}); sfx.whoosh(); if(A.sp) spStart(f,A); return true; }
+function atkParts(f){ const P=f.atk&&f.atk.parts; if(!P) return; while(f.partI<P.length&&f.t>=P[f.partI].t){ const q=P[f.partI++]; play(f,q.clip,{once:true,speed:q.spd,force:true,fade:.05}); } }
 function spStart(f,A){ sfx.special(); popAt(f,A.name+'!',f===F[0]?'gold':'red'); _hp.set(f.x,1.2,f.z); burst(_hp,14,C_SPARK,2.6); crowd.excite=1; if(G.mode==='sp'&&!reduced) G.slowT=Math.max(G.slowT,.2); }
 function stagger(f,by){ const d=dist(f,by)||1; setHit(f,1,.65,(f.x-by.x)/d*1.6,(f.z-by.z)/d*1.6); f.sta=Math.max(0,f.sta-12); }
 function gain(f,v){ const was=f.sp; f.sp=Math.min(100,f.sp+v); if(was<100&&f.sp>=100&&f===F[0]){ popAt(f,'필살기 준비!','gold'); sfx.ready(); } }
@@ -553,7 +572,7 @@ function stepFighter(f,dt){
       if(f.guard) play(f,'Guard',{fade:.07}); else if(f.moving) play(f,'StanceWalk',{fade:.14,speed:f.moving*1.5}); else play(f,'Stance',{fade:.16});
       break; }
     case 'atk': { const A=f.atk,tm=f.tm;
-      if(A.sp){ const need=d-(A.dash?1.3:1.02); if(need>0&&f.t<A.last){ const s=A.dash?Math.min(A.dash,need/Math.max(.04,A.impact-f.t)):A.track,mv=Math.min(need,s*dt); f.x+=fx*mv; f.z+=fz*mv; } }
+      if(A.sp){ atkParts(f); const need=d-(A.stop||1.02); if(need>0&&f.t<A.last){ const s=A.dash?Math.min(A.dash,need/Math.max(.04,A.impact-f.t)):A.track,mv=Math.min(need,s*dt); f.x+=fx*mv; f.z+=fz*mv; } }
       else if(f.t<A.impact*tm&&A.lunge&&d>MINSEP+.05){ const s=A.lunge/(A.impact*tm)*dt; f.x+=fx*s; f.z+=fz*s; }
       while(f.st==='atk'&&f.hitI<A.hits.length&&f.t>=A.hits[f.hitI].t*tm){ const H=A.hits[f.hitI++]; f.hitDone=f.hitI>=A.hits.length; impact(f,H); }
       if(f.st!=='atk') break;
@@ -584,7 +603,7 @@ function aiThink(f,dt){
   I.guard=ai.guardT>0;
   if(o.st==='down'||o.st==='getup'){ if(d<2.4){ I.mx=-fx; I.mz=-fz; } ai.mode='approach'; ai.t=.3; return; }
   if(I.guard) return;
-  if(c.sp&&f.sp>=100&&f.st==='idle'&&d<3.4&&o.st!=='ko'&&Math.random()<dt*c.sp){ I.act='sp'; return; }
+  if(c.sp&&f.sp>=100&&f.st==='idle'&&d<(ATK[f.spId]||ATK.sp2).rng&&o.st!=='ko'&&o.st!=='down'&&o.st!=='getup'&&Math.random()<dt*c.sp){ I.act='sp'; return; }
   const next=ai.q[0],range=next==='kick'||next==='hook'?1.35:1.02;
   switch(ai.mode){
     case 'approach': if(d>range){ I.mx=fx; I.mz=fz; } else if(ai.t<=0){ if(!ai.q.length) ai.q=pick(c.combos).slice(); ai.mode='strike'; } else { I.mx=-fz*.5*ai.dir; I.mz=fx*.5*ai.dir; } break;
@@ -601,12 +620,12 @@ function aiThink(f,dt){
 }
 
 // ---------- 친구 대전 (지금 이 페이지를 열어 둔 사람끼리) ----------
-const net={room:null,code:'',j:0,oppPeer:'',opp:null,host:false,go:0,re:0,qi:0,q:null,seenQ:0,seenSeq:0,seenHit:0,sendT:0,end:null,startT:0,full:false,
+const net={oppCh:-1,room:null,code:'',j:0,oppPeer:'',opp:null,host:false,go:0,re:0,qi:0,q:null,seenQ:0,seenSeq:0,seenHit:0,sendT:0,end:null,startT:0,full:false,
   report(n,res){ this.q={i:++this.qi,n,r:res.r,d:Math.round(res.d*10)/10,k:res.kd,o:res.ko,c:res.c,a:res.a,x:res.x}; this.send(); },
   send(){ if(!this.room||!this.code) return; const f=F[0]; let s='i';
     if(G.phase==='over') s=f.st==='ko'?'k':(G.draw?'i':G.win?'v':'l');
     else if(f.st==='idle') s=f.guard?'g':f.moving>0?'w':f.moving<0?'b':'i'; else s={atk:'a',step:'s',hit:'h',down:'d',getup:'u',ko:'k'}[f.st]||'i';
-    const p={g:1,c:this.code,j:this.j,go:this.host?this.go:0,re:this.re,x:Math.round(f.x*100)/100,z:Math.round(f.z*100)/100,r:Math.round(f.rot*100)/100,s,a:f.atk?f.atk.id:'',n:f.seq,k:f.hitSeq,kt:f.hitKind,h:Math.round(f.hp*10)/10,e:Math.round(f.sta),q:this.q,tm:Math.ceil(G.clock),end:this.host?this.end:null,ph:G.phase};
+    const p={g:1,c:this.code,ch:G.char,j:this.j,go:this.host?this.go:0,re:this.re,x:Math.round(f.x*100)/100,z:Math.round(f.z*100)/100,r:Math.round(f.rot*100)/100,s,a:f.atk?f.atk.id:'',n:f.seq,k:f.hitSeq,kt:f.hitKind,h:Math.round(f.hp*10)/10,e:Math.round(f.sta),q:this.q,tm:Math.ceil(G.clock),end:this.host?this.end:null,ph:G.phase};
     this.room.presence(p).catch(()=>{}); }
 };
 function netPeers(){ if(!net.room||!net.code) return;
@@ -615,7 +634,7 @@ function netPeers(){ if(!net.room||!net.code) return;
   net.full=mi>1; const other=net.full?null:ps[mi===0?1:0]; net.host=mi===0;
   if(!other){ net.opp=null; if(net.oppPeer){ net.oppPeer=''; net.go=0; net.re=0; net.end=null; if(G.mode==='mp'&&G.phase!=='lobby'&&G.phase!=='menu') oppLeft(); } return; }
   if(other.peer!==net.oppPeer){ const had=!!net.oppPeer; net.oppPeer=other.peer; net.go=0; net.re=0; net.end=null; net.seenQ=other.presence.q?other.presence.q.i:0; net.startT=0; if(had&&G.mode==='mp'&&G.phase!=='lobby') oppLeft(); }
-  net.opp=other.presence; }
+  net.opp=other.presence; const ch=other.presence.ch|0; if(ch!==net.oppCh){ net.oppCh=ch; setLook(F[1],lookOf(ch,'foe')); F[1].spId=(CH[ch]||HERO).spId; } }
 function oppLeft(){ banner('상대가 나갔다','',1.6); showLobby(true); }
 function netTick(dt){
   if(G.mode!=='mp'||!net.room) return; netPeers(); const P=net.opp,me=F[0],o=F[1];
@@ -627,9 +646,9 @@ function netTick(dt){
   if(!P) return;
   o.tx=P.x; o.tz=P.z; o.trot=P.r; o.hp=P.h; o.sta=P.e;
   o.x=damp(o.x,o.tx,16,dt); o.z=damp(o.z,o.tz,16,dt); o.rot+=angDiff(o.rot,o.trot)*Math.min(1,dt*14); o.t+=dt;
-  if(P.n!==net.seenSeq){ net.seenSeq=P.n; const A=ATK[P.a]; if(A&&G.phase==='fight'){ o.st='atk'; o.atk=A; o.t=0; o.hitI=0; o.hitDone=false; o.recDone=false; o.tm=1; o.seq=P.n; o.tired=false; play(o,A.clip,{once:true,speed:A.spd,force:true,fade:.06}); if(A.sp) spStart(o,A); } }
+  if(P.n!==net.seenSeq){ net.seenSeq=P.n; const A=ATK[P.a]; if(A&&G.phase==='fight'){ o.st='atk'; o.atk=A; o.t=0; o.hitI=0; o.partI=0; o.hitDone=false; o.recDone=false; o.tm=1; o.seq=P.n; o.tired=false; play(o,A.clip,{once:true,speed:A.spd,force:true,fade:.06}); if(A.sp) spStart(o,A); } }
   if(P.k!==net.seenHit){ net.seenHit=P.k; if(P.s==='h'){ o.st='hit'; o.atk=null; play(o,P.kt?'Hit_Chest':'Hit_Head',{once:true,force:true,fade:.04,speed:.9}); } }
-  if(o.st==='atk'){ const A=o.atk; while(o.hitI<A.hits.length&&o.t>=A.hits[o.hitI].t){ const H=A.hits[o.hitI++]; o.hitDone=o.hitI>=A.hits.length; impact(o,H); } if(A.rec&&!o.recDone&&o.t>=A.recAt){ o.recDone=true; play(o,A.rec,{once:true,speed:1.5,fade:.05}); } if(o.t>=A.dur||'hdku'.indexOf(P.s)>=0){ o.st='idle'; o.atk=null; } }
+  if(o.st==='atk'){ const A=o.atk; atkParts(o); while(o.hitI<A.hits.length&&o.t>=A.hits[o.hitI].t){ const H=A.hits[o.hitI++]; o.hitDone=o.hitI>=A.hits.length; impact(o,H); } if(A.rec&&!o.recDone&&o.t>=A.recAt){ o.recDone=true; play(o,A.rec,{once:true,speed:1.5,fade:.05}); } if(o.t>=A.dur||'hdku'.indexOf(P.s)>=0){ o.st='idle'; o.atk=null; } }
   if(o.st!=='atk'){ const s=P.s,was=o.st; o.guard=s==='g';
     o.st=s==='d'?'down':s==='u'?'getup':s==='k'?'ko':s==='s'?'step':s==='h'?'hit':'idle';
     if(s==='g') play(o,'Guard'); else if(s==='w'||s==='b') play(o,'StanceWalk',{fade:.14,speed:s==='w'?1.5:-1.5}); else if(s==='i'||s==='a') play(o,'Stance',{fade:.16});
@@ -648,14 +667,14 @@ function netTick(dt){
 }
 function decide(mine,theirs){ if(mine===theirs){ G.draw=true; finish(false,'decision'); } else finish(mine>theirs,'decision'); }
 function startMP(){ G.mode='mp'; G.draw=false; lobby.hidden=true; menu.hidden=true; result.hidden=true; pad.hidden=false; hudEl.hidden=false;
-  setLook(F[1],LOOK_FRIEND); F[0].ctrl='player'; F[1].ctrl='remote'; F[0].dmgMul=1; F[1].dmgMul=1;
+  setLook(F[1],lookOf(Math.max(0,net.oppCh),'foe')); F[1].spId=(CH[net.oppCh]||HERO).spId; F[0].spId=CH[G.char].spId; el.spL.textContent=ATK[F[0].spId].name; F[0].ctrl='player'; F[1].ctrl='remote'; F[0].dmgMul=1; F[1].dmgMul=1;
   resetFighter(F[0],net.host?-1.5:1.5,100); resetFighter(F[1],net.host?1.5:-1.5,100); F[0].sp=F[1].sp=0;
   net.seenSeq=net.opp?net.opp.n:0; net.seenHit=net.opp?net.opp.k:0; net.q=null; F[0].seq=(Date.now()%1000)*10+1;
   $('#foeName').textContent='친구'; G.round=1; G.rounds=1; G.clock=99; G.shown=false; G.camSide=net.host?1:-1; $('#rnd').textContent='한판 승부';
   setPhase('intro'); banner('한판 승부','',1); layout(); net.send(); }
 
 // ---------- 경기 흐름 ----------
-function startMatch(lv){ G.mode='sp'; G.level=lv; G.draw=false; const c=LV[lv]; setLook(F[1],c.look); F[1].cfg=c; F[0].ctrl='player'; F[1].ctrl='ai'; F[0].dmgMul=1; F[1].dmgMul=c.dmgMul;
+function startMatch(lv){ G.mode='sp'; G.level=lv; G.draw=false; const c=LV[lv]; setLook(F[1],c.look); F[1].cfg=c; F[1].spId=c.spId; F[0].spId=CH[G.char].spId; el.spL.textContent=ATK[F[0].spId].name; F[0].ctrl='player'; F[1].ctrl='ai'; F[0].dmgMul=1; F[1].dmgMul=c.dmgMul;
   resetFighter(F[0],-1.5,100); resetFighter(F[1],1.5,c.hp); F[0].sp=F[1].sp=0; G.shown=false; G.rounds=3; G.camSide=1;
   menu.hidden=true; result.hidden=true; lobby.hidden=true; pad.hidden=false; hudEl.hidden=false; $('#foeName').textContent=c.nick+' '+c.name; startRound(1); layout(); }
 function startRound(n){ G.round=n; G.clock=60; for(const f of F){ const hp=f.hp,mx=f.maxHp,dl=f.dealt,dn=f.downs,wd=f.wasDown; resetFighter(f,f===F[0]?-1.5:1.5,mx); f.hp=n===1?mx:Math.min(mx,hp+mx*.15); f.dealt=dl; f.downs=dn; f.wasDown=wd; }
@@ -684,7 +703,7 @@ function toMenu(){ if(net.code){ net.code=''; net.oppPeer=''; net.opp=null; if(n
   result.hidden=true; lobby.hidden=true; hudEl.hidden=true; pad.hidden=true; menu.hidden=false; G.mode='sp'; G.sel=Math.min(G.sel,G.unlocked-1);
   setLook(F[1],LV[G.sel].look); F[1].ctrl='ai'; resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); setPhase('menu'); drawLadder(); layout(); }
 function showLobby(waiting){ G.mode='mp'; menu.hidden=true; result.hidden=true; hudEl.hidden=true; pad.hidden=true; lobby.hidden=false; setPhase('lobby'); net.startT=0;
-  resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); setLook(F[1],LOOK_FRIEND); F[1].ctrl='remote';
+  resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); setLook(F[1],lookOf(Math.max(0,net.oppCh),'foe')); F[1].ctrl='remote';
   $('#roomCode').hidden=!!waiting; $('#joinBtn').hidden=!!waiting; lobTxt=''; lobbyText(); layout(); }
 let lobTxt='';
 function lobbyText(){ let t,d;
@@ -750,7 +769,6 @@ function hud(dt){ const me=F[0],o=F[1];
   setIf('stLow',me.sta<12,v=>el.stW.classList.toggle('low',v));
   setIf('sp',Math.round(me.sp),v=>{ el.sp.style.transform='scaleX('+v/100+')'; });
   setIf('spFull',me.sp>=100,v=>{ el.spW.classList.toggle('full',v); keyEls.sp.classList.toggle('ready',v); });
-  setIf('spFar',dist(me,o)>SP_FAR,v=>{ el.spL.textContent=v?'슈퍼맨 펀치':'회오리 연타'; });
   setIf('time',Math.max(0,Math.ceil(G.clock)),v=>{ el.time.textContent=v; });
   setIf('foeDowns',o.downs,v=>{ el.foeTag.textContent=v?'다운 '+v+'회':''; });
   if(hurtA>0){ hurtA=Math.max(0,hurtA-dt*2.2); hurtEl.style.opacity=hurtA; }
@@ -797,6 +815,12 @@ camBtn.addEventListener('click',toggleView);
 const helpEl=$('#help'); function setHelp(on){ helpEl.hidden=!on; G.paused=on; }
 $('#helpBtn').addEventListener('click',()=>setHelp(helpEl.hidden)); $('#helpClose').addEventListener('click',()=>setHelp(false));
 
+const pickEl=$('#pick');
+function drawPick(){ pickEl.textContent='';
+  CH.forEach((c,i)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('aria-pressed',String(i===G.char));
+    const nm=document.createElement('b'); nm.textContent=c.name; const sm=document.createElement('small'); sm.textContent=ATK[c.spId].name; b.append(nm,sm);
+    b.addEventListener('click',()=>{ if(G.char===i||!ready) return; G.char=i; setLook(F[0],lookOf(i,'me')); try{ localStorage.setItem('hanbang.char',String(i)); }catch(e){} drawPick(); });
+    pickEl.appendChild(b); }); }
 const ladder=$('#ladder');
 function drawLadder(){ ladder.textContent='';
   LV.forEach((c,i)=>{ const b=document.createElement('button'); b.type='button'; b.className='foe-row'; b.id='foe'+i; const locked=i>=G.unlocked; b.disabled=locked; b.setAttribute('aria-pressed',String(i===G.sel));
@@ -851,7 +875,7 @@ function makeRoomShim(PeerCtor){
 //SHIM-END
 
 // ---------- 시작 ----------
-drawLadder(); layout();
+drawPick(); drawLadder(); layout();
 loadAll().then(()=>{ resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); G.sel=G.unlocked-1; setLook(F[1],LV[G.sel].look); ready=true; drawLadder(); startBtn.disabled=false; startBtn.textContent='혼자 하기';
   const cl=window.claude; (cl&&cl.use?cl.use('room'):Promise.resolve(null)).then(room=>room||(window.Peer?makeRoomShim(window.Peer):null)).then(room=>{
     if(!room){ multiBtn.textContent='친구 대전 불가'; return; }
