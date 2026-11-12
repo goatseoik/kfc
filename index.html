@@ -233,6 +233,7 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 (()=>{'use strict';
 const $=s=>document.querySelector(s);
@@ -646,7 +647,8 @@ function showLobby(waiting){ G.mode='mp'; menu.hidden=true; result.hidden=true; 
   $('#roomCode').hidden=!!waiting; $('#joinBtn').hidden=!!waiting; lobTxt=''; lobbyText(); layout(); }
 let lobTxt='';
 function lobbyText(){ let t,d;
-  if(!net.code){ t='방 번호'; d='친구와 같은 방 번호 4자리를 넣으면 둘이 바로 붙는다. 친구도 로그인한 채로 이 페이지를 열어 둬야 한다.'; }
+  if(!net.code){ t='방 번호'; d='친구와 같은 방 번호 4자리를 넣으면 둘이 바로 붙는다. 친구도 이 게임을 열어 둬야 한다.'; }
+  else if(net.room&&net.room.fail){ t='연결 안 됨'; d='연결 서버에 닿지 않는다. 인터넷을 확인하고 뒤로 갔다가 다시 들어오자.'; }
   else if(net.full){ t='방이 꽉 찼다'; d=net.code+'번 방에는 이미 두 명이 있다. 돌아가서 다른 번호로 들어가자.'; }
   else if(!net.opp){ t=net.code+'번 방'; d='친구를 기다리는 중… 친구가 같은 번호 '+net.code+'을 넣으면 바로 시작한다.'; }
   else if((net.host?net.opp.re:net.re)!==net.go||net.opp.ph==='over'){ t='친구를 기다리는 중'; d='친구가 다시 붙기를 누르면 바로 시작한다.'; }
@@ -767,10 +769,45 @@ $('#lobBack').addEventListener('click',toMenu);
 $('#resMain').addEventListener('click',e=>{ sfx.init(); const go=e.currentTarget.dataset.go; if(go==='re'){ net.re=net.go; showLobby(true); net.send(); return; } const lv=parseInt(go,10)||0; G.sel=lv; startMatch(lv); });
 $('#resMenu').addEventListener('click',toMenu);
 
+// ---------- 일반 웹용 친구 연결 (Claude 밖에서 열었을 때: PeerJS 일대일 연결) ----------
+//SHIM-START
+function makeRoomShim(PeerCtor){
+  const PFX='hanbang-kfc-',me={peer:'me',presence:null,sameTab:true}; let remote=null,code='',peer=null,conn=null,gen=0,timer=0;
+  const api={fail:false};
+  function drop(){ gen++; clearTimeout(timer); const c=conn,p=peer; conn=null; peer=null; remote=null; try{c&&c.close();}catch(e){} try{p&&p.destroy();}catch(e){} }
+  function retry(g){ clearTimeout(timer); timer=setTimeout(()=>{ if(g===gen&&code) start(code); },1500); }
+  function attach(c,g){
+    if(g!==gen||(conn&&conn.open)){ try{c.close();}catch(e){} return; }
+    conn=c;
+    const hello=()=>{ if(g===gen&&conn===c&&me.presence){ try{c.send({p:me.presence});}catch(e){} } };
+    c.on('data',d=>{ if(g===gen&&conn===c&&d&&d.p) remote={peer:c.peer||'remote',presence:d.p,sameTab:false}; });
+    c.on('open',hello); if(c.open) hello();
+    const gone=()=>{ if(conn===c){ conn=null; remote=null; } if(g===gen&&code) retry(g); };
+    c.on('close',gone); c.on('error',gone); }
+  function netErr(e){ return e&&['network','server-error','socket-error','socket-closed'].indexOf(e.type)>=0; }
+  function start(c){ drop(); code=c; const g=gen,hostId=PFX+c; api.fail=false;
+    const p=new PeerCtor(hostId); peer=p;
+    p.on('open',()=>{ if(g===gen) api.fail=false; });
+    p.on('connection',cn=>attach(cn,g));
+    p.on('error',e=>{ if(g!==gen) return;
+      if(e&&e.type==='unavailable-id'){ try{p.destroy();}catch(_){}
+        const q=new PeerCtor(); peer=q;
+        q.on('open',()=>{ if(g!==gen) return; api.fail=false; attach(q.connect(hostId,{reliable:true}),g); });
+        q.on('error',e2=>{ if(g!==gen) return; if(netErr(e2)) api.fail=true; retry(g); }); }
+      else { if(netErr(e)) api.fail=true; retry(g); } }); }
+  api.presence=function(p){ me.presence=p;
+    if(p&&p.g===1&&p.c){ if(p.c!==code) start(p.c); else if(conn&&conn.open){ try{conn.send({p});}catch(e){} } }
+    else if(code){ code=''; drop(); }
+    return Promise.resolve(); };
+  api.peers=function(){ const a=[me]; if(remote&&conn&&conn.open) a.push(remote); return a; };
+  api.onPeers=function(){};
+  return api; }
+//SHIM-END
+
 // ---------- 시작 ----------
 drawLadder(); layout();
 loadAll().then(()=>{ resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); G.sel=G.unlocked-1; setLook(F[1],LV[G.sel].look); ready=true; drawLadder(); startBtn.disabled=false; startBtn.textContent='혼자 하기';
-  const cl=window.claude; (cl&&cl.use?cl.use('room'):Promise.resolve(null)).then(room=>{
+  const cl=window.claude; (cl&&cl.use?cl.use('room'):Promise.resolve(null)).then(room=>room||(window.Peer?makeRoomShim(window.Peer):null)).then(room=>{
     if(!room){ multiBtn.textContent='친구 대전 불가'; return; }
     net.room=room; multiBtn.disabled=false; room.onPeers(()=>{},()=>{ net.room=null; multiBtn.disabled=true; multiBtn.textContent='친구 대전 불가'; if(G.mode==='mp') toMenu(); });
   }).catch(()=>{ multiBtn.textContent='친구 대전 불가'; });
