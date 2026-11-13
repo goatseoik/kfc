@@ -171,7 +171,7 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
 
     <div id="menu" class="overlay gut">
       <div class="sheet">
-        <p class="eyebrow">3D 종합격투 · 옥타곤</p>
+        <p class="eyebrow">3D 종합격투 · 옥타곤 <span id="ver"></span></p>
         <h1>한방 <em>격투</em></h1>
         <div class="pick"><p class="pick-h">내 선수 <small>선수마다 필살기가 다르다</small></p><div class="pick-row" id="pick"></div></div>
         <div class="ladder" id="ladder"></div>
@@ -427,9 +427,11 @@ const MINSEP=.85;
 // ---------- 불러오기 ----------
 const clips={}; const F=[]; let ready=false;
 const loader=new T.GLTFLoader();
-const getBuf=u=>fetch(u).then(r=>{ if(!r.ok) throw new Error(u); return r.text(); }).then(t=>{ const bin=atob(t.trim()),n=bin.length,a=new Uint8Array(n); for(let i=0;i<n;i++) a[i]=bin.charCodeAt(i); return a.buffer; });
+const VER='5';   // 파일을 바꿀 때마다 올린다: 브라우저가 옛 동작 파일을 계속 쓰는 일을 막는다
+const vurl=(u,fresh)=>u+'?v='+VER+(fresh?'&r='+Date.now():'');
+const getBuf=(u,fresh)=>fetch(vurl(u,fresh),fresh?{cache:'reload'}:undefined).then(r=>{ if(!r.ok) throw new Error(u); return r.text(); }).then(t=>{ const bin=atob(t.trim()),n=bin.length,a=new Uint8Array(n); for(let i=0;i<n;i++) a[i]=bin.charCodeAt(i); return a.buffer; });
 const parse=b=>new Promise((ok,no)=>loader.parse(b.slice(0),'',ok,no));
-const getImg=u=>fetch(u).then(r=>{ if(!r.ok) throw new Error(u); return r.blob(); }).then(b=>new Promise((ok,no)=>{ const im=new Image(); im.onload=()=>ok(im); im.onerror=no; im.src=URL.createObjectURL(b); }));
+const getImg=u=>fetch(vurl(u)).then(r=>{ if(!r.ok) throw new Error(u); return r.blob(); }).then(b=>new Promise((ok,no)=>{ const im=new Image(); im.onload=()=>ok(im); im.onerror=no; im.src=URL.createObjectURL(b); }));
 let skinImg,maskCv=[],normalTex,eyeTex;
 function makeSkin(look){
   const S=1024,c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
@@ -483,6 +485,7 @@ function buildProcClips(f){
   for(const t of clips.Stance.tracks){ const n=t.name.split('.')[0]; if(!legs.test(n)) wt.push(new T.QuaternionKeyframeTrack(t.name,[0],Array.from(t.values.slice(0,4)))); }
   clips.StanceWalk=new T.AnimationClip('StanceWalk',clips.Walk_Loop.duration,wt);
 }
+let clipMiss=[];
 async function loadAll(){
   const [fb,a1,a2,sk,mk,nm,ey]=await Promise.all([getBuf('fighter.txt'),getBuf('a1.txt'),getBuf('a2.txt'),getImg('skin.jpg'),getImg('mask.png'),getImg('normal.jpg'),getImg('eye.png')]);
   skinImg=sk;
@@ -491,7 +494,11 @@ async function loadAll(){
   normalTex=new T.Texture(nm); normalTex.flipY=false; normalTex.needsUpdate=true;
   eyeTex=new T.Texture(ey); eyeTex.flipY=false; eyeTex.encoding=T.sRGBEncoding; eyeTex.needsUpdate=true;
   const [g0,g1,ga,gb]=await Promise.all([parse(fb),parse(fb),parse(a1),parse(a2)]);
-  for(const c of ga.animations.concat(gb.animations)){ c.tracks=c.tracks.filter(t=>t.name.indexOf('root.')!==0&&!/\.scale$/.test(t.name)); clips[c.name]=c; }
+  const addClips=g=>{ for(const c of g.animations){ c.tracks=c.tracks.filter(t=>t.name.indexOf('root.')!==0&&!/\.scale$/.test(t.name)); clips[c.name]=c; } };
+  const missing=()=>{ const m=[]; for(const k in ATK){ const A=ATK[k]; [A.clip,A.rec].concat((A.parts||[]).map(q=>q.clip)).forEach(c=>{ if(c&&c!=='Kick'&&!clips[c]&&m.indexOf(c)<0) m.push(c); }); } return m; };
+  addClips(ga); addClips(gb);
+  if(missing().length){ try{ const [b1,b2]=await Promise.all([getBuf('a1.txt',1),getBuf('a2.txt',1)]); const [h1,h2]=await Promise.all([parse(b1),parse(b2)]); addClips(h1); addClips(h2); }catch(e){} }   // 옛 동작 파일이 걸렸으면 새로 받아 온다
+  clipMiss=missing();
   F.push(makeFighter(g0,lookOf(G.char,'me')),makeFighter(g1,LV[0].look));
   buildProcClips(F[0]); F.forEach(bindClips);
   F[0].opp=F[1]; F[1].opp=F[0]; F[0].ctrl='player'; F[1].ctrl='ai';
@@ -914,8 +921,9 @@ function makeRoomShim(PeerCtor){
 //SHIM-END
 
 // ---------- 시작 ----------
+$('#ver').textContent='· v'+VER;
 drawPick(); drawLadder(); layout();
-loadAll().then(()=>{ resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); G.sel=G.unlocked-1; setLook(F[1],LV[G.sel].look); ready=true; drawLadder(); startBtn.disabled=false; startBtn.textContent='혼자 하기';
+loadAll().then(()=>{ resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); G.sel=G.unlocked-1; setLook(F[1],LV[G.sel].look); ready=true; drawLadder(); startBtn.disabled=false; startBtn.textContent='혼자 하기'; if(clipMiss.length) $('#ver').textContent='· v'+VER+' · 동작 파일 일부를 못 불러왔다(새로 고침)';
   const cl=window.claude; (cl&&cl.use?cl.use('room'):Promise.resolve(null)).then(room=>room||(window.Peer?makeRoomShim(window.Peer):null)).then(room=>{
     if(!room){ multiBtn.textContent='친구 대전 불가'; return; }
     net.room=room; multiBtn.disabled=false; room.onPeers(()=>{},()=>{ net.room=null; multiBtn.disabled=true; multiBtn.textContent='친구 대전 불가'; if(G.mode==='mp') toMenu(); });
