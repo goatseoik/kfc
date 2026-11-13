@@ -87,6 +87,7 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
 .pick-h{margin:0 0 5px;font-family:var(--f-display);font-size:13px;color:var(--gold)}
 .pick-h small{font-family:var(--f-body);font-size:11px;color:var(--dim);margin-left:6px}
 .pick-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.pick-row.two{grid-template-columns:repeat(2,minmax(0,1fr))}
 .pick-row button{min-width:0;padding:7px 2px;border:2px solid var(--line);background:rgba(21,26,39,.85);border-radius:6px;text-align:center}
 .pick-row b{display:block;font-family:var(--f-display);font-weight:400;font-size:15px;line-height:1.2;white-space:nowrap}
 .pick-row small{display:block;color:var(--dim);font-size:clamp(9px,2.6vw,11px);line-height:1.4;white-space:nowrap}
@@ -176,6 +177,7 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
         <p class="eyebrow">3D 종합격투 · 옥타곤 <span id="ver"></span></p>
         <h1>한방 <em>격투</em></h1>
         <div class="pick"><p class="pick-h">내 선수 <small>선수마다 필살기가 다르다</small></p><div class="pick-row" id="pick"></div></div>
+        <div class="pick"><p class="pick-h">경기장 <small>친구 대전은 방장 경기장으로</small></p><div class="pick-row two" id="arenaPick"></div></div>
         <div class="ladder" id="ladder"></div>
         <ul class="how">
           <li><b>잽·스트레이트</b>로 거리를 재고, <b>보디훅·킥</b>으로 크게 때린다</li>
@@ -331,15 +333,17 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
 renderer.outputEncoding=T.sRGBEncoding;
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap;
 const scene=new T.Scene(); scene.background=new T.Color(0x090b12); scene.fog=new T.Fog(col(0x090b12),12,32);
-const cam=new T.PerspectiveCamera(50,1,.1,70); scene.add(cam);
+const cam=new T.PerspectiveCamera(50,1,.1,110); scene.add(cam);
 const hemi=new T.HemisphereLight(0xbfcaff,0x2a2026,.85); scene.add(hemi);
 const spot=new T.SpotLight(0xfff3dc,1.25,0,.85,.5); spot.position.set(1.5,9,3); spot.target.position.set(0,.5,0); spot.castShadow=true; spot.shadow.mapSize.set(1024,1024); spot.shadow.bias=-.0006; spot.shadow.camera.near=3; spot.shadow.camera.far=20; scene.add(spot,spot.target);
 const rim=new T.DirectionalLight(0x8fb0ff,.55); rim.position.set(-3,4,-5); scene.add(rim);
 const fill=new T.DirectionalLight(0xffdcc0,.4); fill.position.set(3,3,5); scene.add(fill);
 const glowTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d'); const gr=g.createRadialGradient(32,32,0,32,32,32); gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(.35,'rgba(255,255,255,.55)'); gr.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle=gr; g.fillRect(0,0,64,64); return new T.CanvasTexture(c); })();
 
-const CAGE_R=6.6,RING=5.9; const fence=[];
-(function buildCage(){
+// 경기장: 기본 옥타곤과 대형 경기장 두 개를 만들어 두고 고른 것만 보인다
+const ARENAS=[{name:'옥타곤',sub:'기본 크기',R:6.6},{name:'대형 경기장',sub:'훨씬 넓다',R:11}];
+let CAGE_R=6.6,RING=5.9,fence=[],camMax=7.5; const arenas=[];
+const floorTex=(function(){
   const oct=(g,cx,cy,r)=>{ g.beginPath(); for(let i=0;i<8;i++){ const a=Math.PI/8+i*Math.PI/4; const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r; i?g.lineTo(x,y):g.moveTo(x,y); } g.closePath(); };
   const c=document.createElement('canvas'); c.width=c.height=1024; const g=c.getContext('2d');
   g.fillStyle='#0b0d15'; g.fillRect(0,0,1024,1024);
@@ -350,10 +354,12 @@ const CAGE_R=6.6,RING=5.9; const fence=[];
   g.fillStyle='#2459c4'; g.fillRect(112,492,70,40); g.fillStyle='#b3262a'; g.fillRect(842,492,70,40);
   g.fillStyle='rgba(20,22,28,.9)'; g.font='900 92px "Black Han Sans","Noto Sans KR",sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('한방',512,518);
   const tex=new T.CanvasTexture(c); tex.encoding=T.sRGBEncoding; tex.anisotropy=4;
+  return tex; })();
+{ const ground=new T.Mesh(new T.PlaneGeometry(120,120),mat(0x0b0d15,{roughness:1})); ground.rotation.x=-Math.PI/2; ground.position.y=-.9; scene.add(ground); }
+function buildArena(R){ const grp=new T.Group(),fz=[],k=R/6.6,tex=floorTex,CAGE_R=R;
   const W=CAGE_R*2*(1024/1000);
-  const ground=new T.Mesh(new T.PlaneGeometry(90,90),mat(0x0b0d15,{roughness:1})); ground.rotation.x=-Math.PI/2; ground.position.y=-.9; scene.add(ground);
-  const base=new T.Mesh(new T.CylinderGeometry(CAGE_R+.5,CAGE_R+.7,.9,8),mat(0x15171d,{roughness:.9})); base.rotation.y=Math.PI/8; base.position.y=-.452; scene.add(base);
-  const floor=new T.Mesh(new T.PlaneGeometry(W,W),new T.MeshStandardMaterial({map:tex,roughness:.9})); floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+  const base=new T.Mesh(new T.CylinderGeometry(CAGE_R+.5,CAGE_R+.7,.9,8),mat(0x15171d,{roughness:.9})); base.rotation.y=Math.PI/8; base.position.y=-.452; grp.add(base);
+  const floor=new T.Mesh(new T.PlaneGeometry(W,W),new T.MeshStandardMaterial({map:tex,roughness:.9})); floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; grp.add(floor);
   const fc=document.createElement('canvas'); fc.width=fc.height=64; const fg=fc.getContext('2d'); fg.strokeStyle='rgba(20,22,28,1)'; fg.lineWidth=5; fg.beginPath(); fg.moveTo(0,32); fg.lineTo(32,0); fg.lineTo(64,32); fg.lineTo(32,64); fg.closePath(); fg.stroke();
   const ap=CAGE_R*Math.cos(Math.PI/8),side=2*CAGE_R*Math.sin(Math.PI/8),H=1.75;
   const padM=mat(0x14161c,{roughness:.6}),postG=new T.CylinderGeometry(.11,.11,H+.1,10);
@@ -361,31 +367,36 @@ const CAGE_R=6.6,RING=5.9; const fence=[];
     const a=i*Math.PI/4, nx=Math.cos(a), nz=Math.sin(a);
     const ft=new T.CanvasTexture(fc); ft.wrapS=ft.wrapT=T.RepeatWrapping; ft.repeat.set(side/.16,H/.16);
     const m=new T.MeshBasicMaterial({map:ft,transparent:true,opacity:.55,side:T.DoubleSide,depthWrite:false});
-    const p=new T.Mesh(new T.PlaneGeometry(side,H),m); p.position.set(nx*ap,H/2,nz*ap); p.rotation.y=Math.atan2(nx,nz); scene.add(p);
-    const rail=new T.Mesh(new T.BoxGeometry(side,.16,.16),padM); rail.position.set(nx*ap,H,nz*ap); rail.rotation.y=p.rotation.y; scene.add(rail);
-    const lo=new T.Mesh(new T.BoxGeometry(side,.1,.12),padM); lo.position.set(nx*ap,.05,nz*ap); lo.rotation.y=p.rotation.y; scene.add(lo);
-    const pa=a+Math.PI/8; const post=new T.Mesh(postG,padM); post.position.set(Math.cos(pa)*CAGE_R,(H+.1)/2,Math.sin(pa)*CAGE_R); scene.add(post);
-    fence.push({m,rail,post,nx,nz,ap});
+    const p=new T.Mesh(new T.PlaneGeometry(side,H),m); p.position.set(nx*ap,H/2,nz*ap); p.rotation.y=Math.atan2(nx,nz); grp.add(p);
+    const rail=new T.Mesh(new T.BoxGeometry(side,.16,.16),padM); rail.position.set(nx*ap,H,nz*ap); rail.rotation.y=p.rotation.y; grp.add(rail);
+    const lo=new T.Mesh(new T.BoxGeometry(side,.1,.12),padM); lo.position.set(nx*ap,.05,nz*ap); lo.rotation.y=p.rotation.y; grp.add(lo);
+    const pa=a+Math.PI/8; const post=new T.Mesh(postG,padM); post.position.set(Math.cos(pa)*CAGE_R,(H+.1)/2,Math.sin(pa)*CAGE_R); grp.add(post);
+    fz.push({m,rail,post,nx,nz,ap});
   }
   const lampM=new T.MeshBasicMaterial({color:0xfff2cf,fog:false,side:T.DoubleSide});
   const coneM=new T.MeshBasicMaterial({color:col(0xbfd2ff),transparent:true,opacity:.04,blending:T.AdditiveBlending,side:T.DoubleSide,depthWrite:false,fog:false});
   for(const sx of [-1,1]) for(const sz of [-1,1]){
-    const l=new T.Mesh(new T.CircleGeometry(.5,16),lampM); l.rotation.x=Math.PI/2; l.position.set(sx*3,9.5,sz*3); scene.add(l);
-    const cn=new T.Mesh(new T.ConeGeometry(3,9.3,20,1,true),coneM); cn.position.set(sx*2.3,4.9,sz*2.3); cn.rotation.set(-sz*.13,0,sx*.13); scene.add(cn);
+    const l=new T.Mesh(new T.CircleGeometry(.5,16),lampM); l.rotation.x=Math.PI/2; l.position.set(sx*3*k,9.5,sz*3*k); grp.add(l);
+    const cn=new T.Mesh(new T.ConeGeometry(3*Math.sqrt(k),9.3,20,1,true),coneM); cn.position.set(sx*2.3*k,4.9,sz*2.3*k); cn.rotation.set(-sz*.13,0,sx*.13); grp.add(cn);
   }
-})();
-const crowd=(()=>{ const N=900,pos=new Float32Array(N*3),colr=new Float32Array(N*3),base=new Float32Array(N*3);
-  for(let i=0;i<N;i++){ const th=Math.random()*Math.PI*2,r=11.5+Math.random()*13; pos[i*3]=Math.cos(th)*r; pos[i*3+1]=(r-11.5)*.5+rand(-.3,.5); pos[i*3+2]=Math.sin(th)*r;
+  grp.visible=false; scene.add(grp); return {grp,fence:fz,R}; }
+ARENAS.forEach(a=>arenas.push(buildArena(a.R)));
+const crowd=(()=>{ const N=1200,pos=new Float32Array(N*3),colr=new Float32Array(N*3),base=new Float32Array(N*3),TH=new Float32Array(N),DR=new Float32Array(N),JY=new Float32Array(N);
+  const place=r0=>{ for(let i=0;i<N;i++){ const r=r0+DR[i]; pos[i*3]=Math.cos(TH[i])*r; pos[i*3+1]=DR[i]*.5+JY[i]; pos[i*3+2]=Math.sin(TH[i])*r; } };
+  for(let i=0;i<N;i++){ TH[i]=Math.random()*Math.PI*2; DR[i]=Math.random()*13; JY[i]=rand(-.3,.5);
     const w=Math.random(); const cc=w<.5?[.5,.42,.32]:w<.8?[.3,.36,.5]:[.5,.2,.2]; const k=rand(.25,.8); base[i*3]=cc[0]*k; base[i*3+1]=cc[1]*k; base[i*3+2]=cc[2]*k; }
-  colr.set(base);
+  place(11.5); colr.set(base);
   const geo=new T.BufferGeometry(); geo.setAttribute('position',new T.BufferAttribute(pos,3)); geo.setAttribute('color',new T.BufferAttribute(colr,3));
   scene.add(new T.Points(geo,new T.PointsMaterial({size:.2,vertexColors:true,sizeAttenuation:true,fog:false})));
   const lit=[]; let acc=0;
-  return { excite:0, update(dt){ acc+=dt*(4+this.excite*40); this.excite=Math.max(0,this.excite-dt*.6);
+  return { excite:0, setR(r0){ place(r0); geo.attributes.position.needsUpdate=true; geo.computeBoundingSphere(); }, update(dt){ acc+=dt*(4+this.excite*40); this.excite=Math.max(0,this.excite-dt*.6);
       while(acc>1){ acc--; const i=Math.random()*N|0; colr[i*3]=colr[i*3+1]=colr[i*3+2]=1.6; lit.push({i,t:.12}); }
       for(let j=lit.length-1;j>=0;j--){ const l=lit[j]; l.t-=dt; if(l.t<=0){ colr[l.i*3]=base[l.i*3]; colr[l.i*3+1]=base[l.i*3+1]; colr[l.i*3+2]=base[l.i*3+2]; lit.splice(j,1); } }
       geo.attributes.color.needsUpdate=true; } };
 })();
+function setArena(i,save){ i=i?1:0; G.arena=i; arenas.forEach((a,k)=>{ a.grp.visible=k===i; }); const a=arenas[i];
+  CAGE_R=a.R; RING=a.R-.7; fence=a.fence; camMax=7.5*a.R/6.6; spot.angle=i?1.05:.85; scene.fog.near=12*a.R/6.6; scene.fog.far=32*a.R/6.6; crowd.setR(a.R+4.9);
+  if(save){ G.arenaPref=i; try{ localStorage.setItem('hanbang.arena',String(i)); }catch(e){} } if(typeof drawArenaPick==='function') drawArenaPick(); }
 const parts=[],pGeo=new T.SphereGeometry(.025,6,5); let pIdx=0;
 for(let i=0;i<120;i++){ const m=new T.Mesh(pGeo,new T.MeshBasicMaterial({transparent:true,fog:false})); m.visible=false; scene.add(m); parts.push({m,v:V(),life:0,max:1}); }
 const C_SWEAT=col(0xdff0ff),C_SPARK=col(0xffd23a),C_FIRE=col(0xff7a2e),C_SMOKE=col(0x8a8f99),C_ICE=col(0x9fe6ff),C_BOLT=col(0xcfe6ff);
@@ -508,7 +519,7 @@ const MINSEP=.85;
 // ---------- 불러오기 ----------
 const clips={}; const F=[]; let ready=false;
 const loader=new T.GLTFLoader();
-const VER='11';   // 파일을 바꿀 때마다 올린다: 브라우저가 옛 동작 파일을 계속 쓰는 일을 막는다
+const VER='12';   // 파일을 바꿀 때마다 올린다: 브라우저가 옛 동작 파일을 계속 쓰는 일을 막는다
 const vurl=(u,fresh)=>u+'?v='+VER+(fresh?'&r='+Date.now():'');
 const getBuf=(u,fresh)=>fetch(vurl(u,fresh),fresh?{cache:'reload'}:undefined).then(r=>{ if(!r.ok) throw new Error(u); return r.text(); }).then(t=>{ const bin=atob(t.trim()),n=bin.length,a=new Uint8Array(n); for(let i=0;i<n;i++) a[i]=bin.charCodeAt(i); return a.buffer; });
 const parse=b=>new Promise((ok,no)=>loader.parse(b.slice(0),'',ok,no));
@@ -586,8 +597,8 @@ async function loadAll(){
 }
 
 // ---------- 경기 상태 ----------
-const G={dev:false,wpn:0,char:0,phase:'menu',pt:0,mode:'sp',level:0,round:1,rounds:3,clock:60,freeze:0,slowT:0,said:false,unlocked:1,sel:0,win:false,draw:false,how:'',shown:false,bannerT:0,view:'back',camSide:1};
-try{ const u=parseInt(localStorage.getItem('hanbang.mma.unlocked'),10); if(u>=1&&u<=LV.length) G.unlocked=u; if(localStorage.getItem('hanbang.view2')==='tv') G.view='tv'; const c=parseInt(localStorage.getItem('hanbang.char'),10); if(c>=0&&c<4) G.char=c; G.dev=localStorage.getItem('hanbang.dev')==='1'; const w=parseInt(localStorage.getItem('hanbang.wpn'),10); if(w>=0&&w<6) G.wpn=w; }catch(e){}
+const G={arena:0,arenaPref:0,dev:false,wpn:0,char:0,phase:'menu',pt:0,mode:'sp',level:0,round:1,rounds:3,clock:60,freeze:0,slowT:0,said:false,unlocked:1,sel:0,win:false,draw:false,how:'',shown:false,bannerT:0,view:'back',camSide:1};
+try{ const u=parseInt(localStorage.getItem('hanbang.mma.unlocked'),10); if(u>=1&&u<=LV.length) G.unlocked=u; if(localStorage.getItem('hanbang.view2')==='tv') G.view='tv'; const c=parseInt(localStorage.getItem('hanbang.char'),10); if(c>=0&&c<4) G.char=c; G.dev=localStorage.getItem('hanbang.dev')==='1'; const w=parseInt(localStorage.getItem('hanbang.wpn'),10); if(w>=0&&w<6) G.wpn=w; G.arenaPref=localStorage.getItem('hanbang.arena')==='1'?1:0; }catch(e){}
 function save(){ try{ localStorage.setItem('hanbang.mma.unlocked',String(G.unlocked)); }catch(e){} }
 function resetFighter(f,x,maxHp){ f.x=x; f.z=0; f.tx=x; f.tz=0; f.rot=x<0?Math.PI/2:-Math.PI/2; f.trot=f.rot; f.st='idle'; f.t=0; f.maxHp=maxHp; f.hp=maxHp; f.sta=100; f.guard=false; f.atk=null; f.hitDone=true; f.recDone=false; f.vx=0; f.vz=0; f.wasDown=false; f.seq=0; f.hitSeq=0; f.hitKind=0; f.buf=null; f.bufT=0; f.dealt=0; f.downs=0; f.tm=1; f.tired=false; f.reacted=false; f.moving=0; f.y=0; f.lean=0; f.gT=1; f.gOff=1; f.hitI=0; f.combo=0; f.comboT=0; f.rage=false; f.wallCd=0; f.frozenT=0; f.I.act=null; f.I.guard=false; f.I.mx=f.I.mz=0; f.ai.mode='approach'; f.ai.t=1; f.ai.q=[]; f.ai.guardT=0; play(f,'Stance',{fade:.2}); }
 function setPhase(p){ G.phase=p; G.pt=0; G.said=false; }
@@ -760,7 +771,7 @@ const net={seenW:0,oppCh:-1,room:null,code:'',j:0,oppPeer:'',opp:null,host:false
   send(){ if(!this.room||!this.code) return; const f=F[0]; let s='i';
     if(G.phase==='over') s=f.st==='ko'?'k':(G.draw?'i':G.win?'v':'l');
     else if(f.st==='idle') s=f.guard?'g':f.moving>0?'w':f.moving<0?'b':'i'; else s={atk:'a',step:'s',hit:'h',down:'d',getup:'u',ko:'k'}[f.st]||'i';
-    const p={g:1,c:this.code,ch:G.char,j:this.j,go:this.host?this.go:0,re:this.re,x:Math.round(f.x*100)/100,z:Math.round(f.z*100)/100,r:Math.round(f.rot*100)/100,s,a:f.atk?f.atk.id:'',n:f.seq,k:f.hitSeq,kt:f.hitKind,h:Math.round(f.hp*10)/10,e:Math.round(f.sta),w:f.wallN,sz:f.size||1,fz:f.frozenT>0?1:0,q:this.q,tm:Math.ceil(G.clock),end:this.host?this.end:null,ph:G.phase};
+    const p={g:1,c:this.code,ch:G.char,ar:G.arena,j:this.j,go:this.host?this.go:0,re:this.re,x:Math.round(f.x*100)/100,z:Math.round(f.z*100)/100,r:Math.round(f.rot*100)/100,s,a:f.atk?f.atk.id:'',n:f.seq,k:f.hitSeq,kt:f.hitKind,h:Math.round(f.hp*10)/10,e:Math.round(f.sta),w:f.wallN,sz:f.size||1,fz:f.frozenT>0?1:0,q:this.q,tm:Math.ceil(G.clock),end:this.host?this.end:null,ph:G.phase};
     this.room.presence(p).catch(()=>{}); }
 };
 function netPeers(){ if(!net.room||!net.code) return;
@@ -804,7 +815,7 @@ function netTick(dt){
   }
 }
 function decide(mine,theirs){ if(mine===theirs){ G.draw=true; finish(false,'decision'); } else finish(mine>theirs,'decision'); }
-function startMP(){ G.mode='mp'; G.draw=false; F[0].size=F[1].size=1; lobby.hidden=true; menu.hidden=true; result.hidden=true; pad.hidden=false; hudEl.hidden=false;
+function startMP(){ G.mode='mp'; G.draw=false; F[0].size=F[1].size=1; setArena(net.host||!net.opp?G.arenaPref:(net.opp.ar|0),false); lobby.hidden=true; menu.hidden=true; result.hidden=true; pad.hidden=false; hudEl.hidden=false;
   setLook(F[1],lookOf(Math.max(0,net.oppCh),'foe')); F[1].spId=(CH[net.oppCh]||HERO).spId; F[0].spId=CH[G.char].spId; el.spL.textContent=ATK[F[0].spId].name; F[0].ctrl='player'; F[1].ctrl='remote'; F[0].dmgMul=1; F[1].dmgMul=1;
   resetFighter(F[0],net.host?-1.5:1.5,100); resetFighter(F[1],net.host?1.5:-1.5,100); F[0].sp=F[1].sp=0;
   net.seenSeq=net.opp?net.opp.n:0; net.seenHit=net.opp?net.opp.k:0; net.seenW=net.opp?net.opp.w|0:0; F[0].wallN=0; net.q=null; F[0].seq=(Date.now()%1000)*10+1;
@@ -840,7 +851,7 @@ function showResult(){ G.shown=true; let title,cls,desc,eb; const main=$('#resMa
   $('#sDealt').textContent=Math.round(me.dealt); $('#sTaken').textContent=Math.round(me.maxHp-me.hp); $('#sDowns').textContent=o.downs+(G.win&&G.how==='ko'?1:0);
   pad.hidden=true; result.hidden=false; layout(); }
 function toMenu(){ if(net.code){ net.code=''; net.oppPeer=''; net.opp=null; if(net.room) net.room.presence({g:0,c:''}).catch(()=>{}); }
-  result.hidden=true; lobby.hidden=true; hudEl.hidden=true; pad.hidden=true; menu.hidden=false; G.mode='sp'; F[0].size=F[1].size=1; G.sel=Math.min(G.sel,G.unlocked-1);
+  result.hidden=true; lobby.hidden=true; hudEl.hidden=true; pad.hidden=true; menu.hidden=false; G.mode='sp'; F[0].size=F[1].size=1; if(G.arena!==G.arenaPref) setArena(G.arenaPref,false); G.sel=Math.min(G.sel,G.unlocked-1);
   setLook(F[1],LV[G.sel].look); F[1].ctrl='ai'; resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); setPhase('menu'); drawLadder(); layout(); }
 function showLobby(waiting){ G.mode='mp'; F[0].size=F[1].size=1; menu.hidden=true; result.hidden=true; hudEl.hidden=true; pad.hidden=true; lobby.hidden=false; setPhase('lobby'); net.startT=0;
   resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); setLook(F[1],lookOf(Math.max(0,net.oppCh),'foe')); F[1].ctrl='remote';
@@ -852,7 +863,7 @@ function lobbyText(){ let t,d;
   else if(net.full){ t='방이 꽉 찼다'; d=net.code+'번 방에는 이미 두 명이 있다. 돌아가서 다른 번호로 들어가자.'; }
   else if(!net.opp){ t=net.code+'번 방'; d='친구를 기다리는 중… 친구가 같은 번호 '+net.code+'을 넣으면 바로 시작한다.'; }
   else if((net.host?net.opp.re:net.re)!==net.go||net.opp.ph==='over'){ t='친구를 기다리는 중'; d='친구가 다시 붙기를 누르면 바로 시작한다.'; }
-  else { t='친구 입장!'; d='곧 시작한다.'; }
+  else { t='친구 입장!'; d='곧 시작한다. 경기장: '+ARENAS[net.host?G.arenaPref:(net.opp.ar|0)].name; }
   const k=t+d; if(k!==lobTxt){ lobTxt=k; $('#lobTitle').textContent=t; $('#lobDesc').textContent=d; } }
 
 function logic(dt){
@@ -886,7 +897,7 @@ function camUpdate(dt,time){
   else if(G.view==='back'){ const S=a.sizeV||1,bw=a.st==='atk'&&a.atk&&(a.atk.model==='mini'||a.atk.model==='bazooka')?1:0; G.bwV=damp(G.bwV||0,bw,4,dt); const B=G.bwV;   // 큰 무기를 들거나 거인이면 카메라를 더 높이·옆으로
     const rx=-az,rz=ax,back=(1.9+Math.max(0,(.9-cam.aspect))*1.3)*S+.3*B,side=.95*S+1.3*(S-1)+.35*B,up=1.62*S+.8*(S-1)+.35*B;
     _cp.set(a.x-ax*back+rx*side,up,a.z-az*back+rz*side); _cl.set(a.x+ax*sep*.85-rx*.1,1.22+.2*(S-1),a.z+az*sep*.85-rz*.1); }
-  else { const Sm=Math.max(a.sizeV||1,b.sizeV||1); let nx=-az,nz=ax; const dd=clamp((sep/2+1.05*Sm)/(tanH*cam.aspect),3*Sm,7.5*Sm);
+  else { const Sm=Math.max(a.sizeV||1,b.sizeV||1); let nx=-az,nz=ax; const dd=clamp((sep/2+1.05*Sm)/(tanH*cam.aspect),3*Sm,camMax*Sm);
     const s1=-Math.hypot(mx+nx*dd,mz+nz*dd)+(G.camSide>0?1.2:0),s2=-Math.hypot(mx-nx*dd,mz-nz*dd)+(G.camSide<0?1.2:0); if(s2>s1){ G.camSide=-1; nx=-nx; nz=-nz; } else G.camSide=1;
     _cp.set(mx+nx*dd,1.5*Sm+dd*.06,mz+nz*dd); _cl.set(mx,1.08*Sm,mz); }
   if(!camInit){ camPos.copy(_cp); camLook.copy(_cl); camInit=true; }
@@ -967,6 +978,12 @@ function drawPick(){ pickEl.textContent='';
     const nm=document.createElement('b'); nm.textContent=c.name; const sm=document.createElement('small'); sm.textContent=ATK[c.spId].name; b.append(nm,sm);
     b.addEventListener('click',()=>{ if(G.char===i||!ready) return; G.char=i; setLook(F[0],lookOf(i,'me')); try{ localStorage.setItem('hanbang.char',String(i)); }catch(e){} drawPick(); });
     pickEl.appendChild(b); }); }
+const arenaEl=$('#arenaPick');
+function drawArenaPick(){ arenaEl.textContent='';
+  ARENAS.forEach((a,i)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('aria-pressed',String(i===G.arena));
+    const nm=document.createElement('b'); nm.textContent=a.name; const sm=document.createElement('small'); sm.textContent=a.sub; b.append(nm,sm);
+    b.addEventListener('click',()=>{ if(G.arena===i) return; sfx.init(); setArena(i,true); });
+    arenaEl.appendChild(b); }); }
 const ladder=$('#ladder');
 function drawLadder(){ ladder.textContent='';
   LV.forEach((c,i)=>{ const b=document.createElement('button'); b.type='button'; b.className='foe-row'; b.id='foe'+i; const locked=i>=G.unlocked; b.disabled=locked; b.setAttribute('aria-pressed',String(i===G.sel));
@@ -1029,7 +1046,7 @@ setWpn(G.wpn);
 verEl.parentNode.addEventListener('click',()=>{ const now=performance.now(); devTaps=now-devTapT<1200?devTaps+1:1; devTapT=now;
   if(devTaps>=5){ devTaps=0; G.dev=!G.dev; try{ localStorage.setItem('hanbang.dev',G.dev?'1':'0'); }catch(e){} sfx.init(); sfx.ready(); drawDev(); } });
 drawDev();
-drawPick(); drawLadder(); layout();
+setArena(G.arenaPref,false); drawPick(); drawLadder(); layout();
 loadAll().then(()=>{ resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); G.sel=G.unlocked-1; setLook(F[1],LV[G.sel].look); ready=true; drawLadder(); startBtn.disabled=false; startBtn.textContent='혼자 하기'; if(clipMiss.length) verEl.textContent+=' · 동작 파일 일부를 못 불러왔다(새로 고침)';
   const cl=window.claude; (cl&&cl.use?cl.use('room'):Promise.resolve(null)).then(room=>room||(window.Peer?makeRoomShim(window.Peer):null)).then(room=>{
     if(!room){ multiBtn.textContent='친구 대전 불가'; return; }
