@@ -443,7 +443,7 @@ const MINSEP=.85;
 // ---------- 불러오기 ----------
 const clips={}; const F=[]; let ready=false;
 const loader=new T.GLTFLoader();
-const VER='8';   // 파일을 바꿀 때마다 올린다: 브라우저가 옛 동작 파일을 계속 쓰는 일을 막는다
+const VER='9';   // 파일을 바꿀 때마다 올린다: 브라우저가 옛 동작 파일을 계속 쓰는 일을 막는다
 const vurl=(u,fresh)=>u+'?v='+VER+(fresh?'&r='+Date.now():'');
 const getBuf=(u,fresh)=>fetch(vurl(u,fresh),fresh?{cache:'reload'}:undefined).then(r=>{ if(!r.ok) throw new Error(u); return r.text(); }).then(t=>{ const bin=atob(t.trim()),n=bin.length,a=new Uint8Array(n); for(let i=0;i<n;i++) a[i]=bin.charCodeAt(i); return a.buffer; });
 const parse=b=>new Promise((ok,no)=>loader.parse(b.slice(0),'',ok,no));
@@ -552,7 +552,7 @@ function spStart(f,A){ sfx.special(); popAt(f,A.name+'!',f===F[0]?'gold':'red');
 function stagger(f,by){ const d=dist(f,by)||1; setHit(f,1,.65,(f.x-by.x)/d*1.6,(f.z-by.z)/d*1.6); f.sta=Math.max(0,f.sta-12); }
 function gain(f,v){ const was=f.sp; f.sp=Math.min(100,f.sp+v*(f.rage?1.5:1)); if(was<100&&f.sp>=100&&f===F[0]){ popAt(f,'필살기 준비!','gold'); sfx.ready(); } }
 function setHit(f,kind,stun,kx,kz){ f.st='hit'; f.t=0; f.stun=stun; f.hitSeq++; f.hitKind=kind; f.vx=kx; f.vz=kz; wallAim(f,9); f.atk=null; f.hitDone=true; f.buf=null; f.guard=false; play(f,kind?'Hit_Chest':'Hit_Head',{once:true,force:true,fade:.04,speed:.9}); }
-function setDown(f,kx,kz){ f.st='down'; f.t=0; f.downs++; f.wasDown=true; f.hitSeq++; f.vx=kx; f.vz=kz; wallAim(f,6); f.atk=null; f.hitDone=true; f.buf=null; f.guard=false; play(f,'Hit_Knockback',{once:true,force:true,fade:.06}); }
+function setDown(f,kx,kz){ f.st='down'; f.t=0; f.shotDown=false; f.downs++; f.wasDown=true; f.hitSeq++; f.vx=kx; f.vz=kz; wallAim(f,6); f.atk=null; f.hitDone=true; f.buf=null; f.guard=false; play(f,'Hit_Knockback',{once:true,force:true,fade:.06}); }
 function setKO(f,kx,kz){ f.st='ko'; f.t=0; f.vx=kx; f.vz=kz; f.atk=null; f.hitDone=true; f.guard=false; play(f,'Death01',{once:true,force:true,fade:.06}); }
 
 // 철창: 철창 가까이에서 밀려나면 끝까지 날아가 부딪힌다
@@ -564,6 +564,13 @@ function tauntDone(f){ gain(f,30); popAt(f,'도발 성공!',f===F[0]?'gold':'red
 // 맞았는지 판정 (맞는 쪽 기준)
 function resolveHit(att,def,A){
   const d=dist(att,def); const res={r:'miss',d:0,kd:0,ko:0,c:0,a:A.id,x:A.x||0};
+  if(A.gun){   // 개발자 총: 가드·스텝·다운 상관없이 그대로 맞는다
+    if(def.st==='ko'||def.st==='win'||def.st==='lose') return res;
+    const nx=(def.x-att.x)/(d||1),nz=(def.z-att.z)/(d||1),lying=def.st==='down'||def.st==='getup',armor=def.st==='atk'&&def.atk&&def.atk.sp;
+    res.r='hit'; res.d=A.dmg*(att.dmgMul||1)*(att.rage?1.2:1); def.hp-=res.d; if(lying) def.shotDown=true;   // 총에 맞은 다운은 일어날 때 체력이 차오르지 않는다
+    if(def.hp<=0){ def.hp=0; res.ko=1; setKO(def,nx*1.6,nz*1.6); }
+    else if(!lying&&!armor) setHit(def,1,A.stun,nx*.8,nz*.8);
+    return res; }
   if(def.st==='down'||def.st==='getup'||def.st==='ko'||def.st==='win'||def.st==='lose') return res;
   if(def.st==='step'&&def.t<.32){ res.r='dodge'; return res; }
   if(d>A.reach) return res;
@@ -599,6 +606,7 @@ function fxHit(att,def,res,A){
   if(onMe){ hurtA=A.h?1:.6; buzz(A.h?60:25); }
   if(res.ko){ sfx.down(); sfx.cheer(); crowd.excite=1; G.slowT=1.1; }
   else if(res.kd){ sfx.down(); crowd.excite=1; popAt(def,'다운!',onMe?'red':'gold'); }
+  else if(A.gun) popAt(def,'-'+Math.round(res.d),onMe?'red':'gold');
   else if(res.c) popAt(def,'카운터!',onMe?'red':'gold');
   else if(att.tired&&mine) popAt(def,'힘이 없다','dim');
 }
@@ -638,7 +646,7 @@ function stepFighter(f,dt){
       break; }
     case 'step': f.x+=f.vx*dt; f.z+=f.vz*dt; f.vx*=Math.exp(-5*dt); f.vz*=Math.exp(-5*dt); if(f.t>=.42){ f.vx=f.vz=0; toIdle(f); } break;
     case 'hit': f.x+=f.vx*dt; f.z+=f.vz*dt; f.vx*=Math.exp(-9*dt); f.vz*=Math.exp(-9*dt); if(f.t>=f.stun){ f.vx=f.vz=0; toIdle(f); } break;
-    case 'down': f.x+=f.vx*dt; f.z+=f.vz*dt; f.vx*=Math.exp(-6*dt); f.vz*=Math.exp(-6*dt); if(f.t>=1.5){ f.st='getup'; f.t=0; f.hp=Math.max(f.hp,f.maxHp*.2); play(f,'LayToIdle',{once:true,fade:.15,speed:1.25}); } break;
+    case 'down': f.x+=f.vx*dt; f.z+=f.vz*dt; f.vx*=Math.exp(-6*dt); f.vz*=Math.exp(-6*dt); if(f.t>=1.5){ f.st='getup'; f.t=0; if(!f.shotDown) f.hp=Math.max(f.hp,f.maxHp*.2); f.shotDown=false; play(f,'LayToIdle',{once:true,fade:.15,speed:1.25}); } break;
     case 'getup': if(f.t>=1.2){ f.sta=Math.max(f.sta,50); f.vx=f.vz=0; toIdle(f); } break;
     case 'ko': f.x+=f.vx*dt; f.z+=f.vz*dt; f.vx*=Math.exp(-6*dt); f.vz*=Math.exp(-6*dt); break;
   }
@@ -653,7 +661,7 @@ function separate(f){ const o=f.opp; if(o.st!=='down'&&o.st!=='ko'&&f.st!=='down
 function aiThink(f,dt){
   const o=f.opp,c=f.cfg,I=f.I,ai=f.ai; const d=dist(f,o)||1e-3,fx=(o.x-f.x)/d,fz=(o.z-f.z)/d;
   I.mx=0; I.mz=0; ai.t-=dt; ai.guardT-=dt;
-  if(o.st==='atk'&&!o.hitDone){ if(!f.reacted&&d<o.atk.reach+.2){ f.reacted=true; const r=Math.random(); if(r<c.block) ai.guardT=o.atk.sp?o.atk.last-o.t+.25:.5; else if(r<c.block+c.dodge&&f.st==='idle'){ I.act='step'; I.mx=-fx; I.mz=-fz; } } }
+  if(o.st==='atk'&&!o.hitDone&&!o.atk.gun){ if(!f.reacted&&d<o.atk.reach+.2){ f.reacted=true; const r=Math.random(); if(r<c.block) ai.guardT=o.atk.sp?o.atk.last-o.t+.25:.5; else if(r<c.block+c.dodge&&f.st==='idle'){ I.act='step'; I.mx=-fx; I.mz=-fz; } } }
   else f.reacted=false;
   I.guard=ai.guardT>0;
   if(o.st==='down'||o.st==='getup'){ if(o.st==='down'&&!ai.taunted){ ai.taunted=true; if(f.st==='idle'&&Math.random()<.45){ I.act='taunt'; return; } } if(d<2.4){ I.mx=-fx; I.mz=-fz; } ai.mode='approach'; ai.t=.3; return; }
