@@ -113,11 +113,6 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
 .cta.alt{background:var(--blue);color:#fff;box-shadow:0 5px 0 #1d4a94}
 .cta.alt:disabled{background:#2c3852;color:#8e9ab8;box-shadow:0 5px 0 #1a2133}
 .ghost{height:46px;border:2px solid var(--line);border-radius:6px;background:transparent;color:var(--ink);font-weight:700}
-.devbox{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
-.devbox input{flex:1 1 140px;min-width:0;height:40px;padding:0 10px;border:2px solid var(--line);border-radius:6px;background:rgba(21,26,39,.85);font-size:16px}
-.devbox .ghost{height:40px;padding:0 14px}
-.devmsg{flex-basis:100%;font-size:12px;color:var(--red)}
-.devmsg:empty{display:none}
 .code{height:54px;border:2px solid var(--line);border-radius:6px;background:rgba(21,26,39,.85);text-align:center;font-family:var(--f-display);font-size:26px;letter-spacing:.2em;width:100%;-webkit-user-select:text;user-select:text}
 .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0}
 .stats div{border-top:2px solid var(--line);padding-top:8px}
@@ -178,7 +173,6 @@ h2.gold{color:var(--gold)} h2.red{color:var(--red)}
     <div id="menu" class="overlay gut">
       <div class="sheet">
         <p class="eyebrow">3D 종합격투 · 옥타곤 <span id="ver"></span></p>
-        <form class="devbox" id="devBox" hidden><input id="devPw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="개발자 코드" placeholder="개발자 코드"><button class="ghost" type="submit">확인</button><span class="devmsg" id="devMsg"></span></form>
         <h1>한방 <em>격투</em></h1>
         <div class="pick"><p class="pick-h">내 선수 <small>선수마다 필살기가 다르다</small></p><div class="pick-row" id="pick"></div></div>
         <div class="ladder" id="ladder"></div>
@@ -449,7 +443,7 @@ const MINSEP=.85;
 // ---------- 불러오기 ----------
 const clips={}; const F=[]; let ready=false;
 const loader=new T.GLTFLoader();
-const VER='7';   // 파일을 바꿀 때마다 올린다: 브라우저가 옛 동작 파일을 계속 쓰는 일을 막는다
+const VER='8';   // 파일을 바꿀 때마다 올린다: 브라우저가 옛 동작 파일을 계속 쓰는 일을 막는다
 const vurl=(u,fresh)=>u+'?v='+VER+(fresh?'&r='+Date.now():'');
 const getBuf=(u,fresh)=>fetch(vurl(u,fresh),fresh?{cache:'reload'}:undefined).then(r=>{ if(!r.ok) throw new Error(u); return r.text(); }).then(t=>{ const bin=atob(t.trim()),n=bin.length,a=new Uint8Array(n); for(let i=0;i<n;i++) a[i]=bin.charCodeAt(i); return a.buffer; });
 const parse=b=>new Promise((ok,no)=>loader.parse(b.slice(0),'',ok,no));
@@ -528,7 +522,7 @@ async function loadAll(){
 
 // ---------- 경기 상태 ----------
 const G={dev:false,char:0,phase:'menu',pt:0,mode:'sp',level:0,round:1,rounds:3,clock:60,freeze:0,slowT:0,said:false,unlocked:1,sel:0,win:false,draw:false,how:'',shown:false,bannerT:0,view:'back',camSide:1};
-try{ const u=parseInt(localStorage.getItem('hanbang.mma.unlocked'),10); if(u>=1&&u<=LV.length) G.unlocked=u; if(localStorage.getItem('hanbang.view2')==='tv') G.view='tv'; const c=parseInt(localStorage.getItem('hanbang.char'),10); if(c>=0&&c<4) G.char=c; }catch(e){}
+try{ const u=parseInt(localStorage.getItem('hanbang.mma.unlocked'),10); if(u>=1&&u<=LV.length) G.unlocked=u; if(localStorage.getItem('hanbang.view2')==='tv') G.view='tv'; const c=parseInt(localStorage.getItem('hanbang.char'),10); if(c>=0&&c<4) G.char=c; G.dev=localStorage.getItem('hanbang.dev')==='1'; }catch(e){}
 function save(){ try{ localStorage.setItem('hanbang.mma.unlocked',String(G.unlocked)); }catch(e){} }
 function resetFighter(f,x,maxHp){ f.x=x; f.z=0; f.tx=x; f.tz=0; f.rot=x<0?Math.PI/2:-Math.PI/2; f.trot=f.rot; f.st='idle'; f.t=0; f.maxHp=maxHp; f.hp=maxHp; f.sta=100; f.guard=false; f.atk=null; f.hitDone=true; f.recDone=false; f.vx=0; f.vz=0; f.wasDown=false; f.seq=0; f.hitSeq=0; f.hitKind=0; f.buf=null; f.bufT=0; f.dealt=0; f.downs=0; f.tm=1; f.tired=false; f.reacted=false; f.moving=0; f.y=0; f.lean=0; f.gT=1; f.gOff=1; f.hitI=0; f.combo=0; f.comboT=0; f.rage=false; f.wallCd=0; f.I.act=null; f.I.guard=false; f.I.mx=f.I.mz=0; f.ai.mode='approach'; f.ai.t=1; f.ai.q=[]; f.ai.guardT=0; play(f,'Stance',{fade:.2}); }
 function setPhase(p){ G.phase=p; G.pt=0; G.said=false; }
@@ -943,26 +937,12 @@ function makeRoomShim(PeerCtor){
 //SHIM-END
 
 // ---------- 시작 ----------
-// 개발자 모드: 첫 화면의 버전 글자를 빠르게 다섯 번 누르면 코드 입력칸이 나온다. 맞는 코드를 넣은 기기에서만 총 버튼이 보인다.
-// 코드는 여기 없고, 코드에서 만든 값의 지문(해시)만 있다. 기기에는 코드가 아니라 중간값을 저장한다.
-const DEV_CHK='87d7e8cd00e9c059481243046d14c8cdac0cb87b755163a0c6fede9563bfb1d4';
-const canSha=!!(window.crypto&&crypto.subtle&&window.TextEncoder);
-const sha=t=>crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)).then(b=>Array.from(new Uint8Array(b),x=>x.toString(16).padStart(2,'0')).join(''));
-const verEl=$('#ver'),devBox=$('#devBox'),devPw=$('#devPw'),devMsg=$('#devMsg'); let devTaps=0,devTapT=0;
+// 개발자 모드: 첫 화면의 버전 글자를 빠르게 다섯 번 누르면 켜지고 꺼진다 (총 버튼이 생긴다)
+const verEl=$('#ver'); let devTaps=0,devTapT=0;
 function drawDev(){ verEl.textContent='· v'+VER+(G.dev?' · 개발자 모드':''); keyEls.gun.hidden=!G.dev; layout(); }
-function setDev(on,tok){ G.dev=on; try{ if(on) localStorage.setItem('hanbang.dev',tok); else localStorage.removeItem('hanbang.dev'); }catch(e){} drawDev(); }
 verEl.parentNode.addEventListener('click',()=>{ const now=performance.now(); devTaps=now-devTapT<1200?devTaps+1:1; devTapT=now;
-  if(devTaps<5) return; devTaps=0;
-  if(G.dev){ setDev(false); return; }
-  devBox.hidden=!devBox.hidden; devMsg.textContent=''; if(!devBox.hidden){ devPw.value=''; devPw.focus(); } });
-devBox.addEventListener('submit',e=>{ e.preventDefault(); const pw=devPw.value.trim().toLowerCase(); if(!pw) return;
-  if(!canSha){ devMsg.textContent='이 주소에서는 켤 수 없다'; return; }
-  sha('hanbang-tok:'+pw).then(tok=>sha(tok).then(h=>{
-    if(h===DEV_CHK){ devBox.hidden=true; devPw.value=''; devPw.blur(); setDev(true,tok); sfx.init(); sfx.ready(); }
-    else { devMsg.textContent='코드가 틀렸다'; devPw.select(); } })).catch(()=>{ devMsg.textContent='확인하지 못했다'; }); });
+  if(devTaps>=5){ devTaps=0; G.dev=!G.dev; try{ localStorage.setItem('hanbang.dev',G.dev?'1':'0'); }catch(e){} sfx.init(); sfx.ready(); drawDev(); } });
 drawDev();
-(function(){ let st=null; try{ st=localStorage.getItem('hanbang.dev'); }catch(e){} if(!st) return;
-  if(!canSha) return; sha(st).then(h=>{ if(h===DEV_CHK){ G.dev=true; drawDev(); } else { try{ localStorage.removeItem('hanbang.dev'); }catch(e){} } }).catch(()=>{}); })();
 drawPick(); drawLadder(); layout();
 loadAll().then(()=>{ resetFighter(F[0],-1.1,100); resetFighter(F[1],1.1,100); G.sel=G.unlocked-1; setLook(F[1],LV[G.sel].look); ready=true; drawLadder(); startBtn.disabled=false; startBtn.textContent='혼자 하기'; if(clipMiss.length) verEl.textContent+=' · 동작 파일 일부를 못 불러왔다(새로 고침)';
   const cl=window.claude; (cl&&cl.use?cl.use('room'):Promise.resolve(null)).then(room=>room||(window.Peer?makeRoomShim(window.Peer):null)).then(room=>{
